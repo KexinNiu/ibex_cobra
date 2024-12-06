@@ -1,0 +1,19 @@
+UniProt Release 2022_01
+
+The UniProt consortium European Bioinformatics Institute (EBI), SIB Swiss
+Institute of Bioinformatics and Protein Information Resource (PIR),
+is pleased to announce UniProt Knowledgebase (UniProtKB) Release
+2022_01 (23-Feb-2022). UniProt (Universal Protein Resource) is a
+comprehensive catalog of information on proteins.
+
+UniProtKB Release 2022_01 consists of 230,895,644 entries (UniProtKB/Swiss-Prot:
+566,996 entries and UniProtKB/TrEMBL: 230,328,648 entries)
+UniRef100 Release 2022_01 consists of 297,827,854 entries
+UniRef90 Release 2022_01 consists of 144,113,457 entries
+UniRef50 Release 2022_01 consists of 51,333,317 entries
+UniParc Release 2022_01 consists of 485,754,416 entries
+UniProt databases can be accessed from the web at http://www.uniprot.org and
+downloaded from http://www.uniprot.org/downloads. Detailed release
+statistics for TrEMBL and Swiss-Prot sections of the UniProt Knowledgebase
+can be viewed at http://www.ebi.ac.uk/uniprot/TrEMBLstats/ and
+http://web.expasy.org/docs/relnotes/relstat.html respectively.

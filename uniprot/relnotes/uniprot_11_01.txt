@@ -1,0 +1,20 @@
+UniProt Release 2011_01
+
+The UniProt consortium European Bioinformatics Institute (EBI), SIB Swiss 
+Institute of Bioinformatics and Protein Information Resource (PIR), 
+is pleased to announce UniProt Knowledgebase (UniProtKB) Release 
+2011_01 (11-Jan-11). UniProt (Universal Protein Resource) is a 
+comprehensive catalog of information on proteins.
+
+UniProtKB Release 2011_01 consists of 13,069,501 entries (UniProtKB/Swiss-Prot: 
+524,420 entries and UniProtKB/TrEMBL: 12,545,081 entries)
+UniRef100 Release 2011_01 consists of 11,659,891 entries
+UniRef90 Release 2011_01 consists of 7,623,063 entries
+UniRef50 Release 2011_01 consists of 3,653,743 entries
+UniParc Release 2011_01 consists of 24,828,830 entries
+UniMES Release 1.0 consists of 6,028,191 entries
+UniProt databases can be accessed from the web at http://www.uniprot.org and 
+downloaded from http://www.uniprot.org/downloads. Detailed release 
+statistics for TrEMBL and Swiss-Prot sections of the UniProt Knowledgebase 
+can be viewed at http://www.ebi.ac.uk/uniprot/TrEMBLstats/ and 
+http://web.expasy.org/docs/relnotes/relstat.html respectively.

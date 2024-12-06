@@ -1,0 +1,14 @@
+*.pkl
+*.out
+*.err
+*.fasta
+*.csv
+*.png
+*.sbml
+.vscode/
+__pycache__/
+remove_rxn_exp/result_*.txt
+*.xml
+*.gb
+
+
