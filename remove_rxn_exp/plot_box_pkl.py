@@ -8,32 +8,39 @@ import pickle
 f ='/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result.csv'
 f ='/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result_cleandf.csv'
 # f='/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01t.csv'
+f ='./01result_cleandf.csv'
 orf='/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result_ori.csv'
-
+orf='01result_ori.csv'
 
 ## read the data
 df = pd.read_csv(f,sep='\t',skiprows=1,header=None)
-df.columns = ['prec','seednum','rm_rxn','rm_rxn_id','method','ori_allgfreactions','wgf_allgfreactions','ori_tp','ori_fn','ori_fp','ori_f1','wgf_tp','wgf_fn','wgf_fp','wgf_f1']
+# df.columns = ['prec','seednum','rm_rxn','rm_rxn_id','method','ori_allgfreactions','wgf_allgfreactions','ori_tp','ori_fn','ori_fp','ori_f1','wgf_tp','wgf_fn','wgf_fp','wgf_f1']
 
+def format_df(df):
+    df.columns = ['prec','seednum','rm_rxn','rm_rxn_id','method','ori_allgfreactions','wgf_allgfreactions','ori_tp','ori_fn','ori_fp','ori_f1','wgf_tp','wgf_fn','wgf_fp','wgf_f1']
+    df = df.drop_duplicates()
+    df['prec'] = df['prec'].astype(float)
+    df['seednum'] = df['seednum'].astype(int)
+    df['rm_rxn_id'] = df['rm_rxn_id'].apply(lambda x: x[1:-1].split(','))
+    df['wgf_allgfreactions'] = df['wgf_allgfreactions'].apply(lambda x: int(x[1:-1]))
+    df['wgf_tp'] = df['wgf_tp'].apply(lambda x: int(x[1:-1]))
+    df['wgf_fn'] = df['wgf_fn'].apply(lambda x:int(x[1:-1]))
+    df['wgf_fp'] = df['wgf_fp'].apply(lambda x: int(x[1:-1]))
+    df['wgf_f1'] = df['wgf_f1'].apply(lambda x: float(x[1:-1]))
+    df['method'] = df['method'].apply(lambda x: int(x[1:-1]))
+    df['ori_allgfreactions'] = [0] * len(df)
+    df['ori_tp'] = [0] * len(df)
+    df['ori_fn'] = [0] * len(df)
+    df['ori_fp'] = [0] * len(df)
+    df['ori_f1'] = [0.0] * len(df)
+    return df
 
-# remove duplicate rows
-df = df.drop_duplicates()
-df['prec'] = df['prec'].astype(float)
-df['seednum'] = df['seednum'].astype(int)
-df['rm_rxn_id'] = df['rm_rxn_id'].apply(lambda x: x[1:-1].split(','))
-df['wgf_allgfreactions'] = df['wgf_allgfreactions'].apply(lambda x: int(x[1:-1]))
-df['wgf_tp'] = df['wgf_tp'].apply(lambda x: int(x[1:-1]))
-df['wgf_fn'] = df['wgf_fn'].apply(lambda x:int(x[1:-1]))
-df['wgf_fp'] = df['wgf_fp'].apply(lambda x: int(x[1:-1]))
-df['wgf_f1'] = df['wgf_f1'].apply(lambda x: float(x[1:-1]))
-df['method'] = df['method'].apply(lambda x: int(x[1:-1]))
-df['ori_allgfreactions'] = [0] * len(df)
-df['ori_tp'] = [0] * len(df)
-df['ori_fn'] = [0] * len(df)
-df['ori_fp'] = [0] * len(df)
-df['ori_f1'] = [0.0] * len(df)
-
+df = format_df(df)
 print(df.head())
+
+retraindf = pd.read_csv('./01result_retraindf.csv',sep='\t',header=None)
+retraindf = format_df(retraindf)
+df = pd.concat([df,retraindf],ignore_index=True)
 # prec  seednum                                          rm_rxn_id  method ori_allgfreactions  ...  ori_f1 wgf_tp wgf_fn wgf_fp    wgf_f1
 # 0  0.05     4444  ['MLDEP2pp',  'SADT2',  'GLUSx',  'CRO4tex',  ...       1                 []  ...      []      4     15    736  0.010540
 # 1  0.05     4444  ['MLDEP2pp',  'SADT2',  'GLUSx',  'CRO4tex',  ...       2                 []  ...      []      1     18    144  0.012195
@@ -92,6 +99,22 @@ print(df.head())
 # Verify the updated dataframe by checking the first few rows
 print(df[['prec', 'seednum','method', 'ori_f1', 'wgf_f1','rm_rxn']].head())
 print(df[df['prec'] == 0.5].head())
+
+
+### print the average f1 for each method
+# Calculate the average F1 score for each method for each seednum and display the results for ori and wgf
+# avg_f1 = df.groupby(['method'])[['ori_f1', 'wgf_f1']].mean()
+# print(avg_f1)
+
+
+# exit()
+
+
+
+
+
+
+
 # Prepare data for plotting
 #########################################F1 SCORE METRICS#############################################333
 # plot_data = df[['prec', 'seednum', 'method', 'ori_f1', 'wgf_f1','wgf_allgfreactions','ori_allgfreactions']]
@@ -125,7 +148,8 @@ g.tight_layout()
 
 # Show the plot
 plt.show()
-plt.savefig('/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/plot_test1_cleandf.png')
+# plt.savefig('/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/plot_test1_cleandf.png')
+plt.savefig('plot_f1_rtrain_oricleandf.png')
 exit()
 
 

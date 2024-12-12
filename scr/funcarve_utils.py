@@ -6,18 +6,37 @@ from sys import stdout
 import warnings
 import pandas as pd
 import symengine
+import cobra
+# from CLEAN.utils import *
+# from CLEAN.infer import infer_maxsep
+from cobra.manipulation.delete import *
+import os
 
+data_root = '../data/'
 
-with open('biggr2ec.pkl', 'rb') as f:
+with open(f'{data_root}biggr2ec.pkl', 'rb') as f:
     biggr2ec = pickle.load(f)
-with open('biggec2r.pkl', 'rb') as f:
+with open(f'{data_root}biggec2r.pkl', 'rb') as f:
     biggec2r = pickle.load(f)
-print("biggr2ec dictionary loaded successfully.")
-with open('seedr2ec.pkl', 'rb') as f:
+print("bigg-ec-reaction dictionary loaded successfully.")
+with open(f'{data_root}seedr2ec.pkl', 'rb') as f:
     seedr2ec = pickle.load(f)
-with open('seedec2r.pkl', 'rb') as f:
+with open(f'{data_root}seedec2r.pkl', 'rb') as f:
     seedec2r = pickle.load(f)
-print("seedr2ec dictionary loaded successfully.")
+print("seed-ec-reaction dictionary loaded successfully.")
+
+def run_clean(fasta_file):
+    # print('Running CLEAN...',flush=True)
+    print('running CLEAN AUTO IS NOT DONE YET',flush=True)
+    pklfileofcleanresult= ''
+    # fastaname = fasta_file.split('/')[-1].split('.')[0]
+    # prepare_infer_fasta(fastaname)
+    # infer_maxsep('split100', fastaname, report_metrics=False, pretrained=True, gmm = './data/pretrained/gmm_ensumble.pkl')
+    # os.remove("data/"+ fastaname +'.csv')
+    # cmd_line = 'python /ibex/user/niuk0a/anaconda3/envs/recon/lib/python3.9/site-packages/reconstructor/CLEAN.py --input ' + fasta_file + ' --output ' + fasta_file.rstrip('.faa') + '_maxsep.csv'
+    # os.system(cmd_line)
+    # fasta_file.rstrip('.faa') + '_maxsep.csv'
+    return pklfileofcleanresult
 
 def read_clean_withscore(input_file,threshold=0.5):
     print('threrhold-->',threshold)
@@ -80,18 +99,16 @@ def read_cleandf_withscore(input_file,threshold=8):
     return pr2ec,ec2pr,allpr2ec,allec2pr
 
 def maximum_separation(dist_lst, first_grad, use_max_grad):
+    #cite from CLEAN
     opt = 0 if first_grad else -1
     gamma = np.append(dist_lst[1:], np.repeat(dist_lst[-1], 10))
     sep_lst = np.abs(dist_lst - np.mean(gamma))
     sep_grad = np.abs(sep_lst[:-1]-sep_lst[1:])
     if use_max_grad:
-        # max separation index determined by largest grad
         max_sep_i = np.argmax(sep_grad)
     else:
-        # max separation index determined by first or the last grad
         large_grads = np.where(sep_grad > np.mean(sep_grad))
         max_sep_i = large_grads[-1][opt]
-    # if no large grad is found, just call first EC
     if max_sep_i >= 5:
         max_sep_i = 0
     return max_sep_i
@@ -104,15 +121,12 @@ def clean2seedr(allpr2ec,threshold):
         dist_lst = list(smallest_10_dist_df)
         max_sep_i = maximum_separation(dist_lst, True, True)
         max_sep_ec = [smallest_10_dist_df.index[i] for i in range(max_sep_i+1)]
-        
         for ec , score in ec_score.items():
             ec = ec.split(':')[-1]
             if ec in seedec2r.keys():
                 rids = seedec2r[ec]
-                # print('ec',ec,'|','rids:',rids)
                 for rid in rids:
                     rid = rid + '_c'
-
                     if rid in universal_scoredict.keys():
                         ori = universal_scoredict[rid]
                         universal_scoredict[rid] = min(score,ori)
@@ -132,13 +146,9 @@ def clean2seedr(allpr2ec,threshold):
                             except KeyError:
                                 rxns[rid] = [pr]
     print('rxns:',len(rxns))
-    # print('rxns:',rxns)
     return universal_scoredict,rxns
 
 def update_predscore(newreactions,allec2pr,newallpr2ec,updateprs,reward,threshold):
-    print('len of newreactions:',len(newreactions))
-    print('len of updateprs:',len(updateprs))
-    # print('before updataer score',[newpredscore[pr] for pr in updateprs])
     count = 0
     for r in newreactions:
         r = r.split('_')[0]
@@ -150,49 +160,40 @@ def update_predscore(newreactions,allec2pr,newallpr2ec,updateprs,reward,threshol
         for ec in ecid:
             try:
                 prd = allec2pr[ec]
-
             except KeyError:
                 count+=1
                 continue
-
-            # take the pr with max val
             try:
-                pr = min(prd, key=prd.get)
+                pr = min(prd, key=prd.get) # take the pr with MIN val for PREDscore
             except ValueError:
                 count+=1
                 continue
-
             try:
                 s = max(float(newallpr2ec[pr][ec]) - reward, 0)
                 if s <= threshold:
                     updateprs.append(pr)
-
-                print(pr,ec,newallpr2ec[pr][ec],'->', s,flush=True)
+                # print(pr,ec,newallpr2ec[pr][ec],'->', s,flush=True)
                 newallpr2ec[pr].update({ec: s})
                 allec2pr[ec].update({pr: s})
-
             except KeyError:
                 count+=1
-    print(f'during update: {count} missing')    
-       
+    # print(f'during update: {count} missing')    
     return newallpr2ec,updateprs,allec2pr
 
 def update_predscore_flux(rxn_flux,allec2pr,newpredscore,updateprs,reward,threshold,fluxflage):
     count = 0
-    ###
+    turnovercount = 0
+    upp=set()
+
     if fluxflage == 1:
         print('gradient reward by flux...')
-    ####
+        print('update reactions based on flux ...',flush=True)
     else:
         print('reward is constant val not effect by flux...',flush=True)
-
-    ####
-    print('fluxflage:',fluxflage)
-    print('update flux reactions...',flush=True)
     for r in rxn_flux.keys():
         flux = rxn_flux[r]
         r = r.split('_')[0]
-        if fluxflage==1:
+        if fluxflage == 1:
             if flux > 0:
                 reward = reward*10
             elif flux > 1e-5:
@@ -211,31 +212,30 @@ def update_predscore_flux(rxn_flux,allec2pr,newpredscore,updateprs,reward,thresh
             except KeyError:
                 count+=1
                 continue
-
-            # take the pr with max val
             try:
                 pr = min(prd, key=prd.get)
             except ValueError:
                 count+=1
                 continue
-
             try:
-                s = max(float(newpredscore[pr][ec]) - reward, 0)
-                if s <= threshold:
+                oriscore = float(newpredscore[pr][ec])
+                if (oriscore - reward) < threshold:
                     updateprs.append(pr)
-                print(pr,ec,newpredscore[pr][ec],'->', s,flush=True)
+                    turnovercount+=1
+                s = max(float(newpredscore[pr][ec]) - reward, 0)
                 newpredscore[pr].update({ec: s})
+                upp.add(pr)
                 allec2pr[ec].update({pr: s})
-
             except KeyError:
                 count+=1
     print(f'during update: {count} missing')    
-       
+    print(f'In total {turnovercount} proteins are turn overed,{len(upp)} proteins are updated',flush=True)
     return newpredscore,updateprs,allec2pr
 
 def update_predscore_block(blockrxn,allec2pr,newpredscore,updateprs,reward,threshold):
     print('updata block reactions...',flush=True)
     count = 0
+    turnovercount = 0
     for r in blockrxn:
         r = r.split('_')[0]
         try:
@@ -249,87 +249,29 @@ def update_predscore_block(blockrxn,allec2pr,newpredscore,updateprs,reward,thres
             except KeyError:
                 count+=1
                 continue
-            # take the pr with max val
             try:
                 pr = min(prd, key=prd.get)
             except ValueError:
                 count+=1
                 continue
             try:
+                if float(newpredscore[pr][ec]) + reward > threshold:
+                    updateprs.append(pr)
+                    turnovercount+=1
                 s = float(newpredscore[pr][ec]) + reward
-                # if s <= threshold:
-                    # updateprs.append(pr)
-                print(pr,ec,newpredscore[pr][ec],'->', s,flush=True)
+                # print(pr,ec,newpredscore[pr][ec],'->', s,flush=True)
                 newpredscore[pr].update({ec: s})
                 allec2pr[ec].update({pr: s})
 
             except KeyError:
                 count+=1
     print(f'during update: {count} missing')    
-       
+    print(f'In total {turnovercount} proteins are turn overed, removed from the draft model ',flush=True)
     return newpredscore,updateprs,allec2pr
     
-# def clean_to_rxns(pr2ec,r2ecf,pr2gene,gene_modelseed,organism):
-#     # loose =True
-#     loose = False
-#     ecf = pd.read_csv(r2ecf, sep='\t')
-#     print('done read ecf',flush=True)
-#     if loose:
-#         allshort = set()
-#         for ec in ecf['External ID'].values:
-#             if '.-' in ec and ec.count('-') <= 2:
-#                 allshort.add(ec)
-
-#     def check(ecid,allshort):
-#         ecid1 = ecid.split('.')[:-1]
-#         ecid1 = '.'.join(ecid1)+'.-'
-#         ecid2 = ecid.split('.')[:-2]
-#         ecid2 = '.'.join(ecid2)+'.-.-'
-#         if ecid1 in allshort:
-#             return True,ecid1
-#         elif ecid2 in allshort:
-#             return True,ecid2
-#         else:
-#             return False,0
-        
-#     print('if loose is true, we will add the loose reactions,loose=',loose,flush=True)
-    
-#     # if org != 'default':
-#     #     new_hits = _get_org_rxns(gene_modelseed, organism)
-#     #     gene_count = len(new_hits)
-#     #     print('Added', gene_count, 'genes from', organism,flush=True)
-#     rxn_p = {}
-#     print('using origianl enzyme to reaction mapping')
-#     for pr in pr2ec.keys():
-#         ecs = pr2ec[pr]
-
-#         for ecid in ecs:
-#             rs = ecf.loc[(ecf['External ID'] == ecid), 'ModelSEED ID'].values.tolist()
-#             if loose:
-#                 f,cutid =check(ecid,allshort)
-#                 if f:
-#                     loose_rxns = ecf.loc[(ecf['External ID'] == cutid), 'ModelSEED ID'].values.tolist()
-#                     rs = rs + loose_rxns
-#                     rs = list(set(rs))
-#             else:
-#                 rs = list(set(rs))
-#             for r in rs:
-#                 r = r + '_c'
-#                 try:
-#                     rxn_p[r].append(pr)
-#                 except KeyError:
-#                     rxn_p[r] = [pr]
-                
-#     for r in rxn_p.keys():
-#         rxn_p[r] = list(set(rxn_p[r]))
-#     print('rxn_p rxn number:',len(list(rxn_p.keys())),flush=True)
-#     return rxn_p
-
-
-def _get_org_rxns(gene_modelseed, organism):
+def get_org_rxns(gene_modelseed, organism):
     ''' Get genes for organism from reference genome '''
     rxn_db = {}
-
     org_genes = []
     for gene in gene_modelseed.keys():
         current = gene.split(':')[0]
@@ -338,48 +280,33 @@ def _get_org_rxns(gene_modelseed, organism):
 
     return set(org_genes)
 
-def _create_model(rxn_db, universal, input_id):
+def create_model(rxn_db, universal, input_id):
     ''' Create draft GENRE and integrate GPRs '''
     new_model = cobra.Model('new_model')
-    c = 0
-    # reactions = []
     tmpuniversal = deepcopy(universal)
     for x in rxn_db.keys():
-        # orix = x
-        # x = x + '_c'
-        # print(orix,'x:',x,'->',rxn_db[orix])
         try:
             rxn = tmpuniversal.reactions.get_by_id(x)
-            # rxn = deepcopy(rxn)
             rxn.gene_reaction_rule = ' or '.join(rxn_db[x])
             new_model.add_reactions([rxn])
-            c+=1
         except KeyError:
-            # print('keyerror:',x)
             continue
-        # if c%50 == 0:
-        #     # print('time:',time.time(),flush=True)
-        #     print('c:',c,flush=True)
     if input_id != 'default':
         new_model.id = input_id
-    print('count of reactions:',c)
     return new_model
 
-
 # Add gene names
-def _add_names(model, gene_db):
+def add_names(model, gene_db):
     ''' Add gene names '''
     for gene in model.genes:
         try:
             gene.name = gene_db[gene.id].title()
         except KeyError:
             continue
-
     return model
 
-
 # pFBA gapfiller
-def _find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type):
+def find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type):
     ''' pFBA gapfiller that modifies universal reaction bag, removes overlapping reacitons from universal reaction bag
     and resets objective if needed, adds model reaction to universal bag, sets lower bound for metabolic tasks, 
     sets minimum lower bound for previous objective, assemble forward and reverse components of all reactions,
@@ -490,15 +417,12 @@ def _find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, ste
     print('step {} --new_rxn_ids:==>'.format(step),len(new_rxn_ids),'\n',new_rxn_ids)
     return(new_rxn_ids)     
 
-
 # pFBA gapfiller
-def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type,weight_dict):
+def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type,weight_dict,upper=15,lower=5,maxweight=100,minweight=0.0):
     ''' pFBA gapfiller that modifies universal reaction bag, removes overlapping reacitons from universal reaction bag
     and resets objective if needed, adds model reaction to universal bag, sets lower bound for metabolic tasks, 
     sets minimum lower bound for previous objective, assemble forward and reverse components of all reactions,
     create objective, based on pFBA, run FBA and identify reactions from universal that are now active'''
-    # stdout.write('\r[                                         ]')
-    # stdout.flush()
 
     # Modify universal reaction bag
     new_rxn_ids = set() #make empty set we will add new reaction ids to
@@ -512,28 +436,22 @@ def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fract
         for rxn in model.reactions: #for a reaction in the draft model reactions
             if rxn.id == obj and file_type != 3: #if a reaction is part of the objective function 
                 continue
-
             orig_rxn_ids |= set([rxn.id])
             try:
                 test = universal.reactions.get_by_id(rxn.id)
                 remove_rxns.append(rxn.id)
             except:
                 continue
-
         # Add model reactions to universal bag
-        print('#add model reactions to universal bag')
+        print('#Add model reactions to universal bag')
         universal.remove_reactions(list(set(remove_rxns)))
         add_rxns = []
         for x in model.reactions:
             if x.id != obj or file_type == 3:
-
                 add_rxns.append(x.copy())
         universal.add_reactions(add_rxns)
-      
-
-
         # Set lower bounds for metaboloic tasks
-        print('#set lower bounds for metaboloic tasks')
+        print('#Set lower bounds for metaboloic tasks')
         if len(tasks) != 0:
             for rxn in tasks:
                 try:
@@ -541,16 +459,14 @@ def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fract
                 except:
                     continue
 
-        # stdout.write('\r[---------------                          ]')
-        # stdout.flush()
-
         # Set minimum lower bound for previous objective
-        print('#set minimum lower bound for previous objective')
+        print('#Set minimum lower bound for previous objective')
         universal.objective = universal.reactions.get_by_id(obj) 
         prev_obj_val = universal.slim_optimize()
-        print('#prev_obj_val:',prev_obj_val)
+        print('#Prev_obj_val:',prev_obj_val)
         # if prev_obj_val < 0:
         #     prev_obj_val = abs(prev_obj_val)
+        
         if step == 1:
             prev_obj_constraint = universal.problem.Constraint(universal.reactions.get_by_id(obj).flux_expression, 
         	   lb=prev_obj_val*fraction, ub=prev_obj_val*max_fraction)
@@ -559,58 +475,39 @@ def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fract
                lb=prev_obj_val*max_fraction, ub=prev_obj_val)
         universal.solver.add(prev_obj_constraint)
         universal.solver.update()
-
         # Assemble forward and reverse components of all reactions
-        print('#assemble forward and reverse components of all reactions')
+        print('#Assemble forward and reverse components of all reactions')
         coefficientDict = {}
-
-
-        pfba_expr = symengine.RealDouble(0)
+# upper=15,lower=5,maxweight=100,minweight=0.0 
         for rxn in universal.reactions:
             if rxn.id in orig_rxn_ids:
-                coefficientDict[rxn.forward_variable] = 0.005
-                coefficientDict[rxn.reverse_variable] = 0.005
+                coefficientDict[rxn.forward_variable] = minweight
+                coefficientDict[rxn.reverse_variable] = minweight
             else:
                 if rxn.id in weight_dict:
-                    
-                    coefficientDict[rxn.forward_variable] = weight_dict[rxn.id]
-                    coefficientDict[rxn.reverse_variable] = weight_dict[rxn.id]
-                    
+                    if weight_dict[rxn.id] < lower:
+                        coefficientDict[rxn.forward_variable] = minweight
+                        coefficientDict[rxn.reverse_variable] = minweight
+                    elif weight_dict[rxn.id] < upper:
+                        coefficientDict[rxn.forward_variable] = (weight_dict[rxn.id]-lower)*(maxweight-minweight)/(upper-lower)+minweight
+                        coefficientDict[rxn.reverse_variable] = (weight_dict[rxn.id]-lower)*(maxweight-minweight)/(upper-lower)+minweight
                 else:
-                    coefficientDict[rxn.forward_variable] = 100
-                    coefficientDict[rxn.reverse_variable] = 100
-               
-  
+                    coefficientDict[rxn.forward_variable] = maxweight
+                    coefficientDict[rxn.reverse_variable] = maxweight
 
         # Create objective, based on pFBA
-        print('#create objective, based on pFBA')
+        print('#Create objective, based on pFBA')
         universal.objective = 0
         universal.solver.update()
         universal.objective = universal.problem.Objective(symengine.RealDouble(0), direction='min', sloppy=True)
         universal.objective.set_linear_coefficients(coefficientDict)
-        
-        # stdout.write('\r[----------------------------------       ]')
-        # stdout.flush()
-
         # Run FBA and identify reactions from universal that are now active
-        print('#run FBA and identify reactions from universal that are now active')
+        print('#Run FBA and identify reactions from universal that are now active')
         solution = universal.optimize()
-        print('# run FBA solution:',solution)
-    # coutn=0
-    # for rxn in reaction_bag.reactions:
-    #     a = solution.fluxes[rxn.id]
-    #     # if rxn.id in orig_rxn_ids:
-    #     #     continue    
-    #     if abs(a) > 1e-13 and rxn.id not in orig_rxn_ids:
-    #         print(rxn.id,'---->',a,end='\n')
-    #     else:
-    #         if a == 0.0:
-    #             coutn+=1
-    # print('count',coutn)
+        print('#Run FBA solution:',solution)
+
     fluxthreshold = 1e-6
-    print('fluxthreshold:',fluxthreshold)
-    # new_rxn_ids = set([rxn.id for rxn in reaction_bag.reactions if abs(solution.fluxes[rxn.id]) > 1e-6]).difference(orig_rxn_ids)
-    # new_rxn_ids = set([rxn.id for rxn in reaction_bag.reactions if abs(solution.fluxes[rxn.id]) > fluxthreshold]).difference(orig_rxn_ids)
+    print('Fluxthreshold:',fluxthreshold)
     new_rxn_flux = {}
     new_rxn_ids = set()
     for rxn in reaction_bag.reactions:
@@ -618,16 +515,13 @@ def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fract
             if rxn.id not in orig_rxn_ids:
                 new_rxn_ids.add(rxn.id)
                 new_rxn_flux[rxn.id] = solution.fluxes[rxn.id]
-    # stdout.write('\r[-----------------------------------------]\n')
-    print('len(new_rxn_ids)',len(new_rxn_ids),'\n',new_rxn_ids,flush=True)
     warnings.filterwarnings('default')
-    print('return with flux:',len(new_rxn_flux.keys()))
+    print('Return with flux:',len(new_rxn_flux.keys()))
     return new_rxn_ids ,coefficientDict,new_rxn_flux
 
 
-
 # Add new reactions to model
-def _gapfill_model(model, universal, new_rxn_ids, obj, step):
+def gapfill_model(model, universal, new_rxn_ids, obj, step):
     '''Adds new reactions to model by getting reactions and metabolites to be added to the model, creates gapfilled model, 
     and identifies extracellular metabolites that still need exchanges '''
     # Get reactions and metabolites to be added to the model
@@ -657,12 +551,11 @@ def _gapfill_model(model, universal, new_rxn_ids, obj, step):
 
 
 # Set uptake of specific metabolites in complete medium gap-filling
-def _set_base_inputs(model, universal):
+def set_base_inputs(model, universal):
     tasks = ['EX_cpd00035_e','EX_cpd00051_e','EX_cpd00132_e','EX_cpd00041_e','EX_cpd00084_e','EX_cpd00053_e','EX_cpd00023_e',
     'EX_cpd00033_e','EX_cpd00119_e','EX_cpd00322_e','EX_cpd00107_e','EX_cpd00039_e','EX_cpd00060_e','EX_cpd00066_e','EX_cpd00129_e',
     'EX_cpd00054_e','EX_cpd00161_e','EX_cpd00065_e','EX_cpd00069_e','EX_cpd00156_e','EX_cpd00027_e','EX_cpd00149_e','EX_cpd00030_e',
     'EX_cpd00254_e','EX_cpd00971_e','EX_cpd00063_e','EX_cpd10515_e','EX_cpd00205_e','EX_cpd00099_e']
-
     new_rxns = []
     for exch in tasks: 
         try:
@@ -671,11 +564,9 @@ def _set_base_inputs(model, universal):
             new_rxns.append(deepcopy(universal.reactions.get_by_id(exch)))
     model.add_reactions(new_rxns)
     for exch in tasks: model.reactions.get_by_id(exch).bounds = (-1000., -0.01)
-
     return model
 
-
-def _add_annotation(model, gram, obj='built'):
+def add_annotation(model, gram, obj='built'):
     ''' Add gene, metabolite, reaction ,biomass reaction annotations '''
     # Genes
     for gene in model.genes:
@@ -723,7 +614,7 @@ def _add_annotation(model, gram, obj='built'):
     
 
 # Run some basic checks on new models
-def _checkModel(pre_reactions, pre_metabolites, post_model):
+def checkModel(pre_reactions, pre_metabolites, post_model):
     print('\n\tChecking new model...',flush=True)  
     ''' Run basic checks on new models (checking for objective flux'''
 
@@ -754,3 +645,38 @@ def print_model_info(model):
     print('status:',model.solver.status)
     print('*'*10,flush=True)
 
+def differ(predscore,newpredscore):
+    differdict={}
+    for pr in predscore.keys():
+        for ec in predscore[pr].keys():
+            try:
+                if predscore[pr][ec] != newpredscore[pr][ec]:
+                    differdict[pr] = {ec:predscore[pr][ec]}
+            except KeyError:
+                continue
+    return differdict
+
+def infer_confidence_gmm(distance, gmm_lst):
+    confidence = []
+    for j in range(len(gmm_lst)):
+        main_GMM = gmm_lst[j]
+        a, b = main_GMM.means_
+        true_model_index = 0 if a[0] < b[0] else 1
+        certainty = main_GMM.predict_proba([[distance]])[0][true_model_index]
+        confidence.append(certainty)
+    return np.mean(confidence)
+
+def convert_distance_to_confidence(df,gmmf,first_grad=True, use_max_grad=False):
+    '''Convert distance to confidence'''
+    for col in df.columns:
+        ec=[]
+        smallest_10_dist_df = df[col].nsmallest(20)
+        dist_lst = list(smallest_10_dist_df)
+        max_sep_i = maximum_separation(dist_lst, first_grad, use_max_grad)
+        for i in range(max_sep_i+1):
+            EC_i = smallest_10_dist_df.index[i]
+            dist_i = smallest_10_dist_df[i]
+            if gmmf != None:
+                gmm_lst = pickle.load(open(gmmf, 'rb'))
+                dist_i = infer_confidence_gmm(dist_i, gmm_lst)
+            dist_str = "{:.4f}".format(dist_i)

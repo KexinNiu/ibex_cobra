@@ -10,7 +10,8 @@ import argparse
 import cobra
 import os
 
-def get_unreviewed_genes(unreviewed_f='/ibex/user/niuk0a/funcarve/cobra/269799_unreviewed.tsv'):
+# def get_unreviewed_genes(unreviewed_f='/ibex/user/niuk0a/funcarve/cobra/269799_unreviewed.tsv'):
+def get_unreviewed_genes(unreviewed_f='../269799_unreviewed.tsv'):
     unreviewed = pd.read_csv(unreviewed_f, sep='\t')
     unreviewed_genes = set(unreviewed['Gene Names'].str.split(' ').sum())
     return unreviewed_genes
@@ -144,16 +145,21 @@ def gapfill_weight(model,universal,rm_rxn_id,universal_scoredict,result,method):
 
     print(f'wgf:{method}')
     print(f'tp:{len(inter)},fn:{len([rxn for rxn in rm_rxn_id if rxn not in inter])},fp:{len([rxn for rxn in allnewid if rxn not in inter])}')
-    return final_genre,result
+    print('all gapfill rxn weight:',len(allnewid))
+    # for rxn in allnewid:
+    #     print(rxn,universal_scoredict[rxn],'protein:',universal_scoredict[rxn])
+    return final_genre,result,allnewid
 
 
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Remove reactions based on gene annotation')
-    parser.add_argument('--model', type=str, default='/ibex/user/niuk0a/funcarve/cobra/uniprot/iAF987.xml',help='Input model')
-    parser.add_argument('--unreviewedf', type=str, default='/ibex/user/niuk0a/funcarve/cobra/269799_unreviewed.tsv',help='Unreviewed genes')
-    # parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_t4_maxsep_df.pkl',help='Unreviewed genes')
-    parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_maxsep_df.pkl',help='Unreviewed genes')
+    parser.add_argument('--model', type=str, default='../uniprot/iAF987.xml',help='Input model')
+    parser.add_argument('--unreviewedf', type=str, default='../269799_unreviewed.tsv',help='Unreviewed genes')
+    # parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_t4_maxsep_df.pkl',help='retrain')
+    # parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_maxsep_df.pkl',help='ori')
+    # /home/kexin/code/bigg/data/CP000148.1_t4_maxsep_df.pkl
+    parser.add_argument('--cleanf', type=str, default='/home/kexin/code/bigg/data/CP000148.1_t4_maxsep_df.pkl',help='retrain')
     parser.add_argument('--seednum', type=int, default=7777,help='Seed number for random sampling')
     parser.add_argument('--prec', type=float,default=0.3, help='Percentage of reactions to remove')
     parser.add_argument('--type', type=str,default='all', help='Type of gene annotation')
@@ -167,10 +173,10 @@ if __name__ == '__main__':
     # universal_scoredict,rxns = clean2seedr(predscore,threshold=8)
     method = int(args.meth)
     seednum = args.seednum
-    universal_scoredict,rxns,r2maxecp = clean2biggr(predscore,threshold=8)
+    universal_scoredict,rxns,r2maxecp = clean2biggr(predscore,threshold=5)
     
     can_remove,genes_rxn,rxn_genes = get_rm_pool(model,unreviewed_genes,type=args.type)
-    universal = cobra.io.load_json_model("/ibex/user/niuk0a/funcarve/cobra/bigg/universal_model_cobrapy.json")
+    universal = cobra.io.load_json_model("../bigg/universal_model_cobrapy.json")
     # universal_seedf = '/ibex/user/niuk0a/funcarve/cobra/universal_reconori.pickle'
     # universal_seed = pickle.load(open(universal_seedf,'rb'))
 
@@ -228,15 +234,30 @@ if __name__ == '__main__':
     # ori_gf_model,result = gapfill_ori(model,universal_seed,rm_rxn_id,result)
     # ori_gf_model,result = gapfill_ori(orirmmodel,universal,rm_rxn_id,result)
     # print(f'>>Done with ori gapfill {prec}',flush=True)
-    w_gf_model,result = gapfill_weight(wfgrmmodel,universal,rm_rxn_id,universal_scoredict,result,method)
+    w_gf_model,result,allnewrxnid = gapfill_weight(wfgrmmodel,universal,rm_rxn_id,universal_scoredict,result,method)
     print(f'>>Done with weighted gapfill {prec}',flush=True)
+    with open('biggr2ec.pkl', 'rb') as f:
+        biggr2ec = pickle.load(f)
+    print('threshold:',5)
+for rxn in allnewrxnid:
+    if rxn in biggr2ec:
+        ec = biggr2ec[rxn]
+        for e in ec:
+            e = e.split(':')[1]
+            if e in ec2pr.keys():
+                pr = ec2pr[e]
+                for p in pr.keys():
+                    score = predscore[p][e]
+                    print(rxn,e,p,score,sep='|')
+    else:
+        print('nothing:',rxn)
     # cobra.io.write_sbml_model(ori_gf_model, args.model.split('.xml')[0] + '_ori_gf_' + str(prec) + '.sbml')
     # cobra.io.write_sbml_model(w_gf_model, args.model.split('.xml')[0] + '_w_gf_' + str(prec) + '.sbml')
     # break   
     print('end of prec:',prec,flush=True)
 
 # save result
-of = open('/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result_cleandf.csv','a+')
+of = open('01result_retraindf_t5.csv','a+') ## other all t8
 # of = open('/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result_ori.csv','a+')
 print(f'{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["ori_allgfreactions"]}\t{result["wgf_allgfreactions"]}\t{result["ori_tp"]}\t{result["ori_fn"]}\t{result["ori_fp"]}\t{result["ori_f1"]}\t{result["wgf_tp"]}\t{result["wgf_fn"]}\t{result["wgf_fp"]}\t{result["wgf_f1"]}',file=of)
 of.close()

@@ -14,11 +14,11 @@ with open('biggr2ec.pkl', 'rb') as f:
 with open('biggec2r.pkl', 'rb') as f:
     biggec2r = pickle.load(f)
 print("biggr2ec dictionary loaded successfully.")
-with open('seedr2ec.pkl', 'rb') as f:
-    seedr2ec = pickle.load(f)
-with open('seedec2r.pkl', 'rb') as f:
-    seedec2r = pickle.load(f)
-print("seedr2ec dictionary loaded successfully.")
+# with open('seedr2ec.pkl', 'rb') as f:
+#     seedr2ec = pickle.load(f)
+# with open('seedec2r.pkl', 'rb') as f:
+#     seedec2r = pickle.load(f)
+# print("seedr2ec dictionary loaded successfully.")
 
 def read_fasta(fasta_file):
     seq=''
@@ -87,13 +87,9 @@ def read_clean_withscore(input_file,threshold=0.5):
 
 def read_cleandf_withscore(input_file,threshold=8):
     df = pd.read_pickle(input_file)
-
     allpr2ec = df.to_dict()
     allec2pr = df.T.to_dict()
-    
     df = df[df <= threshold]
-    # df_cleaned = df.dropna(how='all', axis=0).dropna(how='all', axis=1)
-
     pr2ec = {col: {row: value for row, value in df[col].dropna().items()} 
                                   for col in df.columns
                                   if not df[col].dropna().empty
@@ -101,7 +97,6 @@ def read_cleandf_withscore(input_file,threshold=8):
     ec2pr = {row: {col: value for col, value in df.loc[row].dropna().items()} 
                         for row in df.index 
                         if not df.loc[row].dropna().empty}
-    
     return pr2ec,ec2pr,allpr2ec,allec2pr
 
 
@@ -816,7 +811,28 @@ def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fract
                     else:
                         coefficientDict[rxn.forward_variable] = 1
                         coefficientDict[rxn.reverse_variable] = 1
-
+        elif method == 11:
+            # max_weight = max(weight_dict.values())
+            # min_weight = min(weight_dict.values())
+            print('threshold: ==?5')
+            for rxn in universal.reactions:
+                if rxn.id in orig_rxn_ids:
+                    coefficientDict[rxn.forward_variable] = 0.0
+                    coefficientDict[rxn.reverse_variable] = 0.0
+                else:
+                    if rxn.id in weight_dict:
+                        if weight_dict[rxn.id] < 5:
+                            coefficientDict[rxn.forward_variable] = 0.0
+                            coefficientDict[rxn.reverse_variable] = 0.0
+                        if weight_dict[rxn.id] > 15:
+                            coefficientDict[rxn.forward_variable] = 100
+                            coefficientDict[rxn.reverse_variable] = 100
+                        else:
+                            coefficientDict[rxn.forward_variable] = (weight_dict[rxn.id]-5)*10
+                            coefficientDict[rxn.reverse_variable] = (weight_dict[rxn.id]-5)*10
+                    else:
+                        coefficientDict[rxn.forward_variable] = 100
+                        coefficientDict[rxn.reverse_variable] = 100
         # Create objective, based on pFBA
         print('#create objective, based on pFBA')
         universal.objective = 0
