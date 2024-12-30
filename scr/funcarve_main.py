@@ -1,28 +1,16 @@
-import sys
-import time
 import numpy as np
-import wget
-import shutil
 import os
 import cobra
 import pickle
 import argparse
-import warnings
-import symengine
-import subprocess
 from random import shuffle
 from multiprocessing import cpu_count
-from sys import stdout
 from copy import deepcopy
 from subprocess import call
 from cobra.util import solver
-import platform
 import pandas as pd
-from unipath import Path
 from cobra.manipulation.delete import *
 from funcarve_utils import *
-# Ensure argparse is imported
-import argparse
 
 
 # Parse arguments
@@ -54,13 +42,11 @@ args.add_argument('--minweight', default=0.0, help='Minimum weight for reactions
 # args.add_argument('--minweight', default=0.0, help='Minimum weight for reactions')
 
 args.add_argument('--gram', default='none', help='Type of Gram classificiation (positive or negative)')
-args.add_argument('--out', default='default', help='Name of output GENRE file')
+args.add_argument('--out', default='defaultpath', help='Name of output GENRE file')
 args.add_argument('--name', default='default', help='ID of output GENRE')
 args.add_argument('--cpu', default=1, help='Number of processors to use')
 args.add_argument('--gapfill', default='yes', help='gapfill your model?')
 args.add_argument('--exchange', default = 1, help='open exchange: 1, shut down exchange: 0')
-args.add_argument('--test', default = 'no', help='do you want to perform the test suite?')
-
 args.add_argument('--startindex', default = 1, help='the start index of the iteration')
 
 args = args.parse_args()
@@ -105,7 +91,7 @@ if __name__ == "__main__":
     processors = int(args.cpu)
     gapfill = str(args.gapfill)
     exchange_arg = int(args.exchange)
-    test = str(args.test)
+    
     
     # upper=15,lower=5,maxweight=100,minweight=0.0
     upper = float(args.upper)
@@ -178,6 +164,8 @@ if __name__ == "__main__":
         if i == 1:
             if file_type ==2:
                 fasta_file = input_file
+                print('need to run clean function prediction',flush=True)
+                exit()
                 # clean_file = run_clean(fasta_file)
             elif file_type == 1:
                 clean_file = input_file
@@ -345,18 +333,21 @@ if __name__ == "__main__":
             thr = str(float(threshold)).split('.')[0]
         else:
             thr = str(threshold).split('.')[-1]
-
-        if file_type == 1:
+        if out_file != 'defaultpath':
+            out_file = out_file
+        elif file_type == 1:
             if new_id != 'default':
                 out_file = input_file.rstrip('maxsep_df.pkl') + new_id + f'I{i}'+ '.sbml'
             else:
                 out_file = input_file.rstrip('maxsep_df.pkl') + 'enzbuild' +  f'I{i}'+'.sbml'
+            out_file = '../data/result/sbmls/' + out_file
         elif file_type == 2:
             if new_id != 'default':
                 out_file = input_file.rstrip('.fasta') + new_id + f'I{i}'+ '.sbml'
             else:
                 out_file = input_file.rstrip('.fasta') + 'enzbuild' +  f'I{i}'+'.sbml'
-        out_file = '../data/result/sbmls/' + out_file
+        
+            out_file = '../data/result/sbmls/' + out_file
         print('\n>>Saving new GEM to', out_file, '\n')
 
         differpredscore = differ(predscore,newpredscore)

@@ -16,6 +16,9 @@ remove_rxn_exp/result_*.txt
 *.txt
 *.json
 *.pickle
+cobra.yml
+clean.yml
+env_cobra.yml
 newrxn_belowthre/
 krish/
 casestudy/
