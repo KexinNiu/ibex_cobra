@@ -1,22 +1,57 @@
 import pickle
 import random
-import mergem
-import mergem
-from mergem import translate, load_model, save_model
+# import mergem
+# from mergem import translate, load_model, save_model
 import pandas as pd
-from funcarve_utils import clean2biggr, _find_reactions,_gapfill_model,_set_base_inputs,_add_annotation,_checkModel,read_cleandf_withscore,clean2seedr,weighted_find_reactions
+from rm_funcarve_utils import clean2biggr, find_reactions,gapfill_model,set_base_inputs,add_annotation,checkModel,read_cleandf_withscore,clean2seedr,weighted_find_reactions
+from Bio import SeqIO
 from copy import deepcopy
 import argparse
 import cobra
 import os
+import pandas as pd
 
+
+
+def parse_genebank(f):
+    recs = [rec for rec in SeqIO.parse(f, "genbank")]
+    rec = recs[0]
+    feats = [feat for feat in rec.features if feat.type == "CDS"]
+    lt2ec={}
+    lt2oldlt={}
+    oldlt2lt={}
+    for feat in feats:
+        dd = feat.qualifiers
+        '''
+        dd = {'locus_tag': ['TM_RS00005'], 'old_locus_tag': ['TM0005', 'TM_0005'], 'EC_number': ['3.6.4.12'], 'inference': ['COORDINATES: similar to AA sequence:RefSeq:WP_012310830.1'], 'GO_function': ['GO:0003678 - DNA helicase activity [Evidence IEA]'], 'GO_process': ['GO:0006281 - DNA repair [Evidence IEA]'], 'note': ['Derived by automated computational analysis using gene prediction method: Protein Homology.'], 'codon_start': ['1'], 'transl_table': ['11'], 'product': ['IGHMBP2 family helicase'], 'protein_id': ['WP_010865024.1'], 'db_xref': ['GI:499163180'], 'translation': ['MTVQQFIKKLVRLVELERNAEINAMLDEMKRLSGEEREKKGRAVLGLTGKFIGEELGYFLVRFGRRKKIDTEIGVGDLVLISKGNPLKSDYTGTVVEKGERFITVAVDRLPSWKLKNVRIDLFASDITFRRQIENLMTLSSEGKKALEFLLGKRKPEESFEEEFTPFDEGLNESQREAVSLALGSSDFFLIHGPFGTGKTRTLVEYIRQEVARGKKILVTAESNLAVDNLVERLWGKVSLVRIGHPSRVSSHLKESTLAHQIETSSEYEKVKKMKEELAKLIKKRDSFTKPSPQWRRGLSDKKILEYAEKNWSARGVSKEKIKEMAEWIKLNSQIQDIRDLIERKEEIIASRIVREAQVVLSTNSSAALEILSGIVFDVVVVDEASQATIPSILIPISKGKKFVLAGDHKQLPPTILSEDAKDLSRTLFEELITRYPEKSSLLDTQYRMNELLMEFPSEEFYDGKLKAAEKVRNITLFDLGVEIPNFGKFWDVVLSPKNVLVFIDTKNRSDRFERQRKDSPSRENPLEAQIVKEVVEKLLSMGVKEDWIGIITPYDDQVNLIRELIEAKVEVHSVDGFQGREKEVIIISFVRSNKNGEIGFLEDLRRLNVSLTRAKRKLIATGDSSTLSVHPTYRRFVEFVKKKGTYVIF']}
+        '''
+        locus_tag = dd['locus_tag']
+        try:
+            ec_number = dd['EC_number']
+            lt2ec[locus_tag[0]] = ec_number
+        except:
+            pass
+        try:
+            old_locus_tag = dd['old_locus_tag']
+            lt2oldlt[locus_tag[0]] = old_locus_tag
+            if len(old_locus_tag) >= 1:
+                for old in old_locus_tag:
+                    oldlt2lt[old] = locus_tag
+        except:
+            pass
+        
+    return lt2ec, lt2oldlt, oldlt2lt   
+ 
 # def get_unreviewed_genes(unreviewed_f='/ibex/user/niuk0a/funcarve/cobra/269799_unreviewed.tsv'):
-def get_unreviewed_genes(unreviewed_f='../269799_unreviewed.tsv'):
-    unreviewed = pd.read_csv(unreviewed_f, sep='\t')
-    unreviewed_genes = set(unreviewed['Gene Names'].str.split(' ').sum())
-    return unreviewed_genes
+def get_reviewed_genes(reviewed_f):
+    reviewed = pd.read_csv(reviewed_f, sep='\t')
+    reviewed = reviewed[reviewed['Reviewed'] == 'reviewed']
+    ## drop nan
+    reviewed = reviewed.dropna(subset=['Gene Names'])
+    reviewed_genes = set(reviewed['Gene Names'].str.split(' ').sum())
+    return reviewed_genes
 
-def get_rm_pool(model,unreviewed_genes,type='all'):
+def get_rm_pool(model,reviewed_genes,type='all'):
     can_remove = []
     genes_rxn = {}
     rxn_genes = {}
@@ -32,7 +67,7 @@ def get_rm_pool(model,unreviewed_genes,type='all'):
                         else:
                             genes_rxn[gene] = [rxn.id]
                     
-                        if  gene in unreviewed_genes:
+                        if  gene in reviewed_genes:
                             can_remove.append(rxn)
                             break
                     rxn_genes[rxn.id] = "|".join(genes)
@@ -45,7 +80,7 @@ def get_rm_pool(model,unreviewed_genes,type='all'):
                             genes_rxn[gene].append(rxn.id)
                         else:
                             genes_rxn[gene] = [rxn.id]
-                        if gene in unreviewed_genes:
+                        if gene in reviewed_genes:
                             can_remove.append(rxn)
                             break
                 elif type == 'all':
@@ -59,7 +94,7 @@ def get_rm_pool(model,unreviewed_genes,type='all'):
                         else:
                             genes_rxn[gene] = [rxn.id]
                         
-                        if gene not in unreviewed_genes:
+                        if gene not in reviewed_genes:
                             flag = 1
                     if flag == 0:
                         can_remove.append(rxn)
@@ -89,21 +124,21 @@ def gapfill_ori(model,universal_seed,rm_rxn_id,result):
     max_frac=0.5
     file_type = 1
     exchange_arg=1
-    draft_reactions = set([x.id for x in model.reactions])
-    draft_metabolites = set([x.id for x in model.metabolites])
-    new_reactions = _find_reactions(model, universal_seed, metabolic_tasks, universal_obj, min_frac, max_frac, 1, file_type)
+
+    new_reactions = find_reactions(model, universal_seed, metabolic_tasks, universal_obj, min_frac, max_frac, 1, file_type)
     print('new_reactions:',new_reactions,len(new_reactions))
     inter = set(new_reactions).intersection(set(rm_rxn_id))
-    filled_genre = _gapfill_model(model, universal_seed, new_reactions, universal_obj, 1)
+    filled_genre = gapfill_model(model, universal_seed, new_reactions, universal_obj, 1)
     print('Identifying new metabolism (Step 2 of 2)...')
-    filled_genre = _set_base_inputs(filled_genre, universal_seed)
-    media_reactions = _find_reactions(filled_genre, universal_seed, metabolic_tasks, universal_obj, min_frac, max_frac, 2, file_type)
+    filled_genre = set_base_inputs(filled_genre, universal_seed)
+    media_reactions = find_reactions(filled_genre, universal_seed, metabolic_tasks, universal_obj, min_frac, max_frac, 2, file_type)
     
-    final_genre = _gapfill_model(filled_genre, universal_seed, media_reactions, universal_obj, 2)
-    final_genre = _add_annotation(final_genre, gram_type)
+    final_genre = gapfill_model(filled_genre, universal_seed, media_reactions, universal_obj, 2)
+    final_genre = add_annotation(final_genre, gram_type)
     for exch in final_genre.exchanges: exch.bounds = (-1000., 1000.)
     allnewid = set(new_reactions).union(set(media_reactions))
     inter = allnewid.intersection(set(rm_rxn_id))
+    print('ORI:')
     print('allnewid:',allnewid)
     print('rm_rxn_id:',rm_rxn_id)
     print('inter:',inter)
@@ -123,19 +158,52 @@ def gapfill_weight(model,universal,rm_rxn_id,universal_scoredict,result,method):
     universal_obj = str(model.objective.expression).split()[0].split('*')[-1]
     min_frac=0.01
     max_frac=0.5
+    if method ==1:
+        upper = 15
+        lower = 5
+        maxw =100.0
+        minw =0.0
+    elif method ==2:
+        upper = 15
+        lower = 6
+        maxw = 100.0
+        minw = 0.0
+    elif method ==3:
+        upper = 20
+        lower = 5
+        maxw = 100.0
+        minw = 0.0
+    elif method ==4:
+        upper = 20
+        lower = 4
+        maxw = 100.0
+        minw = 0.0
+    elif method ==5:
+        upper = 20
+        lower = 4
+        maxw = 100.0
+        minw = 0.05
+    elif method ==6:
+        upper = 15
+        lower = 6
+        maxw = 100.0
+        minw = 0.05
+
     file_type = 1
     exchange_arg=1
     filled_genre = deepcopy(model)
     draft_reactions = set([x.id for x in filled_genre.reactions])
     draft_metabolites = set([x.id for x in filled_genre.metabolites])
-    new_reactions_ids ,coefficientDict,new_rxn_flux = weighted_find_reactions(filled_genre, universal, metabolic_tasks, universal_obj, min_frac, max_frac, 1, file_type,universal_scoredict,method)
+    new_reactions_ids ,coefficientDict,new_rxn_flux = weighted_find_reactions(filled_genre, universal, metabolic_tasks, universal_obj, min_frac, max_frac, 1, file_type,universal_scoredict,upper,lower,maxw,minw)
     print('Identifying new metabolism (Step 2 of 2)...')
-    filled_genre = _set_base_inputs(filled_genre, universal)
-    media_reactions ,coefficientDict,new_rxn_flux = weighted_find_reactions(filled_genre, universal, metabolic_tasks, universal_obj, min_frac, max_frac, 2, file_type,universal_scoredict,method)
-    final_genre = _gapfill_model(filled_genre, universal, media_reactions, universal_obj, 2)
-    final_genre = _add_annotation(final_genre, gram_type)
+    filled_genre = set_base_inputs(filled_genre, universal)
+    media_reactions ,coefficientDict,new_rxn_flux = weighted_find_reactions(filled_genre, universal, metabolic_tasks, universal_obj, min_frac, max_frac, 2, file_type,universal_scoredict,upper,lower,maxw,minw)
+    final_genre = gapfill_model(filled_genre, universal, media_reactions, universal_obj, 2)
+    final_genre = add_annotation(final_genre, gram_type)
     allnewid = set(new_reactions_ids).union(set(media_reactions))
     inter = allnewid.intersection(set(rm_rxn_id))
+    print('WGF:')
+    print('rm_rxn_id:',len(rm_rxn_id))
     result['wgf_allgfreactions'].append(len(allnewid))
     result['wgf_tp'].append(len(inter))
     result['wgf_fn'].append(len([rxn for rxn in rm_rxn_id if rxn not in inter]))
@@ -146,8 +214,6 @@ def gapfill_weight(model,universal,rm_rxn_id,universal_scoredict,result,method):
     print(f'wgf:{method}')
     print(f'tp:{len(inter)},fn:{len([rxn for rxn in rm_rxn_id if rxn not in inter])},fp:{len([rxn for rxn in allnewid if rxn not in inter])}')
     print('all gapfill rxn weight:',len(allnewid))
-    # for rxn in allnewid:
-    #     print(rxn,universal_scoredict[rxn],'protein:',universal_scoredict[rxn])
     return final_genre,result,allnewid
 
 
@@ -157,25 +223,65 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='../uniprot/iAF987.xml',help='Input model')
     parser.add_argument('--unreviewedf', type=str, default='../269799_unreviewed.tsv',help='Unreviewed genes')
     # parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_t4_maxsep_df.pkl',help='retrain')
-    # parser.add_argument('--cleanf', type=str, default='/ibex/user/niuk0a/CLEAN/app/results/inputs/CP000148.1_maxsep_df.pkl',help='ori')
-    # /home/kexin/code/bigg/data/CP000148.1_t4_maxsep_df.pkl
     parser.add_argument('--cleanf', type=str, default='/home/kexin/code/bigg/data/CP000148.1_t4_maxsep_df.pkl',help='retrain')
     parser.add_argument('--seednum', type=int, default=7777,help='Seed number for random sampling')
     parser.add_argument('--prec', type=float,default=0.3, help='Percentage of reactions to remove')
     parser.add_argument('--type', type=str,default='all', help='Type of gene annotation')
     parser.add_argument('--meth', type=int,default=1, help='Type of gene annotation')
+    parser.add_argument('--ori',type=int,default=1, help='Type of gene annotation')
     args = parser.parse_args()
+######
+    # python 01remove_rxn.py --prec 0.2  --seednum 7777 --meth 1 --cleanf  /ibex/user/niuk0a/CLEAN/app/results/inputs/NC_000853.1_t1_maxsep_df.pkl --unreviewedf /ibex/user/niuk0a/funcarve/cobra/uniprot/uniprot_243274.tsv --model /ibex/user/niuk0a/funcarve/cobra/uniprot/iLJ478.xml
+    # method = 1
+    # seednum = 7777
+    # args.cleanf = '/ibex/user/niuk0a/CLEAN/app/results/inputs/NC_000853.1_t1_maxsep_df.pkl'
+    # args.unreviewedf = '/ibex/user/niuk0a/funcarve/cobra/uniprot/uniprot_243274.tsv'
+    # args.model = '/ibex/user/niuk0a/funcarve/cobra/uniprot/iLJ478.xml'
+    # args.prec = 0.2
+    # args.meth = 1
+    modelname = args.model.split('/')[-1].split('.')[0]
+    print('modelname:',modelname)
+    ori = args.ori
+    print('ori:',ori)
+
+######
 
     model = cobra.io.read_sbml_model(args.model)  ## bigg model
     media = model.medium ## bigg media
-    unreviewed_genes = get_unreviewed_genes(args.unreviewedf)
-    pr2ec,ec2pr,predscore,allec2pr = read_cleandf_withscore(args.cleanf,threshold=8)
+    reviewed_genes = get_reviewed_genes(args.unreviewedf)
+    # reviewed_genes need to translate by .gb file
+    gbf = args.cleanf.replace('_t1_maxsep_df.pkl','.gb').replace('/ibex/user/niuk0a/CLEAN/app/results/inputs/','/ibex/user/niuk0a/funcarve/cobra/uniprot/')
+    print('gbf:',gbf)
+    print('ori reviewed_genes:',len(reviewed_genes),list(reviewed_genes)[:20])
+    new_reviewed_genes = set()
+    if os.path.exists(gbf):
+        lt2ec, lt2oldlt, oldlt2lt  = parse_genebank(gbf)
+        for gene in reviewed_genes:
+            if gene in oldlt2lt:
+                # reviewed_genes.remove(gene)
+                for item in oldlt2lt[gene]:
+                    new_reviewed_genes.add(item)
+                    otherold = lt2oldlt[item]
+                    for old in otherold:
+                        new_reviewed_genes.add(old)
+
+    reviewed_genes = new_reviewed_genes.union(reviewed_genes)
+                # reviewed_genes.add(oldlt2lt[gene])
+
+    print('reviewed_genes:',len(reviewed_genes),list(reviewed_genes)[:10])
+    pr2ec,ec2pr,predscore,allec2pr = read_cleandf_withscore(args.cleanf,threshold=5)
     # universal_scoredict,rxns = clean2seedr(predscore,threshold=8)
     method = int(args.meth)
     seednum = args.seednum
+
+
+
+
+
     universal_scoredict,rxns,r2maxecp = clean2biggr(predscore,threshold=5)
     
-    can_remove,genes_rxn,rxn_genes = get_rm_pool(model,unreviewed_genes,type=args.type)
+    can_remove,genes_rxn,rxn_genes = get_rm_pool(model,reviewed_genes,type=args.type)
+    print('can_remove:',len(can_remove))
     universal = cobra.io.load_json_model("../bigg/universal_model_cobrapy.json")
     # universal_seedf = '/ibex/user/niuk0a/funcarve/cobra/universal_reconori.pickle'
     # universal_seed = pickle.load(open(universal_seedf,'rb'))
@@ -214,13 +320,12 @@ if __name__ == '__main__':
     # for prec in precrange:
     tmpmodel = deepcopy(model)
     rm_rxn,rm_rxn_id = get_remove_rxn(args.seednum,prec,can_remove)
-    # >>> rm_rxn
-    # [<Reaction AGM3PA at 0x1549164a0fa0>, <Reaction MLTGY3pp at 0x154916008a30>, <Reaction 2AGPEAT181 at 0x1549162d4e50>, <Reaction IPPMIa at 0x154916112f70>, <Reaction 2AGPGAT181 at 0x154916223550>, <Reaction AACPS2 at 0x1549165e1e20>, <Reaction GM1LIPAabctex at 0x154916194a60>, <Reaction GM2LIPAabctex at 0x154916194eb0>, <Reaction MNtex at 0x15491601ac70>, <Reaction NI2tex at 0x154915fc5d90>, <Reaction 3OAS100 at 0x154916601220>, <Reaction MEOHtex at 0x1549160a1880>, <Reaction IPPMIb at 0x154916124bb0>, <Reaction SULRpp at 0x154915d047c0>, <Reaction HACD2 at 0x15491615df70>, <Reaction BZALCtex at 0x154916450b20>, <Reaction CYTMQOR3pp at 0x154916349b80>, <Reaction LCYSTtex at 0x1549160ee970>, <Reaction ACACT6r at 0x15491659ab50>, <Reaction HACD4 at 0x1549160f3d00>, <Reaction MACPD at 0x15491606edc0>, <Reaction BMOGDS1 at 0x1549163fb820>, <Reaction CUabcpp at 0x15491637ef10>, <Reaction DMATT at 0x15491630b2e0>, <Reaction FBA at 0x154916200190>, <Reaction PGSA160 at 0x154915e9ef40>, <Reaction RBFSa at 0x154915cffe20>, <Reaction 3OAR121 at 0x154916656d00>, <Reaction BWCOGDS1 at 0x1549163fbc40>, <Reaction 3OAR80 at 0x154916601910>, <Reaction CLPNS120pp at 0x1549163d4af0>, <Reaction SUCOAACTr at 0x154915d04fd0>, <Reaction HDR3 at 0x1549161c7cd0>, <Reaction MCOATA at 0x1549160bf460>, <Reaction FORtex at 0x1549161b42e0>, <Reaction FERCYT at 0x154916223fa0>, <Reaction UDPG4E at 0x154915c37a00>, <Reaction CLPNS160pp at 0x1549163d4b20>, <Reaction ACt2rpp at 0x154916557e50>]
-    # >>> rm_rxn_id
-    # ['AGM3PA', 'MLTGY3pp', '2AGPEAT181', 'IPPMIa', '2AGPGAT181', 'AACPS2', 'GM1LIPAabctex', 'GM2LIPAabctex', 'MNtex', 'NI2tex', '3OAS100', 'MEOHtex', 'IPPMIb', 'SULRpp', 'HACD2', 'BZALCtex', 'CYTMQOR3pp', 'LCYSTtex', 'ACACT6r', 'HACD4', 'MACPD', 'BMOGDS1', 'CUabcpp', 'DMATT', 'FBA', 'PGSA160', 'RBFSa', '3OAR121', 'BWCOGDS1', '3OAR80', 'CLPNS120pp', 'SUCOAACTr', 'HDR3', 'MCOATA', 'FORtex', 'FERCYT', 'UDPG4E', 'CLPNS160pp', 'ACt2rpp']
+    print('rm_rxn:',rm_rxn)
+    print('rm_rxn_id:',rm_rxn_id)
     for rxnid in rm_rxn_id:
         tmpmodel.reactions.get_by_id(rxnid).remove_from_model()
     rm_model,rm_metabolits = cobra.manipulation.prune_unused_metabolites(tmpmodel)
+    
     ## add rm reaction to universal model
     universal = add_rm_rxn_2uni(universal,rm_rxn)
     cobra.io.write_sbml_model(model, args.model.split('.xml')[0] + '_rm_' + str(prec) + '.sbml')
@@ -232,35 +337,32 @@ if __name__ == '__main__':
     orirmmodel = deepcopy(rm_model)
     wfgrmmodel = deepcopy(rm_model)
     # ori_gf_model,result = gapfill_ori(model,universal_seed,rm_rxn_id,result)
-    # ori_gf_model,result = gapfill_ori(orirmmodel,universal,rm_rxn_id,result)
-    # print(f'>>Done with ori gapfill {prec}',flush=True)
-    w_gf_model,result,allnewrxnid = gapfill_weight(wfgrmmodel,universal,rm_rxn_id,universal_scoredict,result,method)
-    print(f'>>Done with weighted gapfill {prec}',flush=True)
-    with open('biggr2ec.pkl', 'rb') as f:
-        biggr2ec = pickle.load(f)
-    print('threshold:',5)
-for rxn in allnewrxnid:
-    if rxn in biggr2ec:
-        ec = biggr2ec[rxn]
-        for e in ec:
-            e = e.split(':')[1]
-            if e in ec2pr.keys():
-                pr = ec2pr[e]
-                for p in pr.keys():
-                    score = predscore[p][e]
-                    print(rxn,e,p,score,sep='|')
+    print('rm_rxn_id:',len(rm_rxn_id))
+    if ori == 1:
+        ori_gf_model,result = gapfill_ori(orirmmodel,universal,rm_rxn_id,result)
+        print(f'>>Done with ori gapfill {prec}',flush=True)
+        print('rm_rxn_id:',len(rm_rxn_id))
     else:
-        print('nothing:',rxn)
-    # cobra.io.write_sbml_model(ori_gf_model, args.model.split('.xml')[0] + '_ori_gf_' + str(prec) + '.sbml')
-    # cobra.io.write_sbml_model(w_gf_model, args.model.split('.xml')[0] + '_w_gf_' + str(prec) + '.sbml')
-    # break   
+        w_gf_model,result,allnewrxnid = gapfill_weight(wfgrmmodel,universal,rm_rxn_id,universal_scoredict,result,method)
+        print(f'>>Done with weighted gapfill {prec}',flush=True)
+ 
     print('end of prec:',prec,flush=True)
+    print('result:',[(key,len(item)) for key,item in result.items() ])
 
 # save result
-of = open('01result_retraindf_t5.csv','a+') ## other all t8
-# of = open('/ibex/user/niuk0a/funcarve/cobra/remove_rxn_exp/01result_ori.csv','a+')
-print(f'{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["ori_allgfreactions"]}\t{result["wgf_allgfreactions"]}\t{result["ori_tp"]}\t{result["ori_fn"]}\t{result["ori_fp"]}\t{result["ori_f1"]}\t{result["wgf_tp"]}\t{result["wgf_fn"]}\t{result["wgf_fp"]}\t{result["wgf_f1"]}',file=of)
-of.close()
+# of = open('01result_retraindf_t5.csv','a+') ## other all t8
+# print(f'{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["ori_allgfreactions"]}\t{result["wgf_allgfreactions"]}\t{result["ori_tp"]}\t{result["ori_fn"]}\t{result["ori_fp"]}\t{result["ori_f1"]}\t{result["wgf_tp"]}\t{result["wgf_fn"]}\t{result["wgf_fp"]}\t{result["wgf_f1"]}',file=of)
+# # print(f'{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["ori_allgfreactions"]}\t{result["wgf_allgfreactions"]}\t{result["ori_tp"]}\t{result["ori_fn"]}\t{result["ori_fp"]}\t{result["ori_f1"]}\t{result["wgf_tp"]}\t{result["wgf_fn"]}\t{result["wgf_fp"]}\t{result["wgf_f1"]}',file=of)
+# of.close()
+
+if ori == 1:
+    oriof = open(f'mmodel7_{modelname}_ori_r.csv','a+') ## other all t8
+    print(f'{modelname}\t{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["ori_allgfreactions"]}\t{result["ori_tp"]}\t{result["ori_fn"]}\t{result["ori_fp"]}\t{result["ori_f1"]}',file=oriof)
+    oriof.close()
+else:
+    wgf_of = open(f'mmodel7_{modelname}_wgf_r.csv','a+') ## other all t8
+    print(f'{modelname}\t{prec}\t{seednum}\t{len(rm_rxn_id)}\t{rm_rxn_id}\t{result["method"]}\t{result["wgf_allgfreactions"]}\t{result["wgf_tp"]}\t{result["wgf_fn"]}\t{result["wgf_fp"]}\t{result["wgf_f1"]}',file=wgf_of)
+    wgf_of.close()
 # print('result:',[(key,item) for key,item in result.items() if key != 'rm_rxn_id'])
 # # exit()
 

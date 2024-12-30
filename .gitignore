@@ -3,6 +3,7 @@
 *.err
 *.fasta
 *.csv
+*.tsv
 *.png
 *.sbml
 .vscode/
@@ -10,5 +11,16 @@ __pycache__/
 remove_rxn_exp/result_*.txt
 *.xml
 *.gb
+*.tar.gz
+*.sh
+*.txt
+*.json
+*.pickle
+newrxn_belowthre/
+krish/
+casestudy/
+bigg/
+tiannv/
+
 
 

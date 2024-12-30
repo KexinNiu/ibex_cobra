@@ -1,44 +1,3 @@
-#!/usr/bin/env
-
-### using all possible ec from clean 
-'''Reconstructor 
-
-Reconstructor is an automatic genome scale metabolic network reconstruction tool that is user-friendly, COBRApy compatible, and uses a pFBA-based
-gap-filling technique. 
-
-Inputs
----------
-Type 1: Annotated protein fasta file
-Type 2: BLASTp output
-Type 3: SBML Model
-
-Output
----------
-Well-annotated SBML model that uses ModelSEED namespace and is directly compatible with COBRApy withotut the need for additional compatibility modules
-
-Example of how to run reconstructor
------------------------------------
-Type 1 input:  python -m reconstructor --input Osplanchnicus.aa.fasta --type 1 --gram negative --other_args <args>
-Type 2 input: python -m reconstructor --input Osplanchnicus.hits.out --type 2 --gram negative --other_args <args>
-Type 3 input: python -m reconstructor --input Osplanchnicus.sbml --type 3 --other_args <args>
-
-Options for Running Reconstructor 
----------------------------------
---input <input file, Required>
---type <input file type, .fasta = 1, diamond blastp output = 2, .sbml = 3, Required, Default = 1> 
---gram <Type of Gram classificiation (positive or negative), default = positive>
---media <List of metabolites composing the media condition. Not required.>
---tasks <List of metabolic tasks. Not required>
---org <KEGG organism code. Not required>
---min_frac <Minimum objective fraction required during gapfilling, default = 0.01>
---max_frac <Maximum objective fraction allowed during gapfilling, default = 0.5>
---out <Name of output GENRE file, default = default>
---name <ID of output GENRE, default = default>
---cpu <Number of processors to use, default = 1>
---test <run installation tests, default = no>
-'''
-
-# Dependencies
 import sys
 import time
 import numpy as np
@@ -62,9 +21,9 @@ import pandas as pd
 from unipath import Path
 from cobra.manipulation.delete import *
 from funcarve_utils import *
-
 # Ensure argparse is imported
 import argparse
+
 
 # Parse arguments
 args = argparse.ArgumentParser(description='Generate genome-scale metabolic network reconstruction from KEGG BLAST hits.')
@@ -82,9 +41,9 @@ args.add_argument('--org', default='default', help='KEGG organism code. Not requ
 args.add_argument('--min_frac', default=0.01, help='Minimum objective fraction required during gapfilling')
 args.add_argument('--max_frac', default=0.5, help='Maximum objective fraction allowed during gapfilling')
 
-args.add_argument('--threshold', default = 8, help='The cutoff value for the EC prediction score')
-args.add_argument('--upper', default=15, help='Upper threshold for predscore')
-args.add_argument('--lower', default=5, help='Lower threshold for predscore')
+args.add_argument('--threshold', default = 5, help='The cutoff value for the EC prediction score')
+args.add_argument('--upper', default= 15, help='Upper threshold for predscore')
+args.add_argument('--lower', default= 5, help='Lower threshold for predscore')
 args.add_argument('--maxweight', default=100, help='Maximum weight for reactions')
 args.add_argument('--minweight', default=0.0, help='Minimum weight for reactions')
 
@@ -102,12 +61,14 @@ args.add_argument('--gapfill', default='yes', help='gapfill your model?')
 args.add_argument('--exchange', default = 1, help='open exchange: 1, shut down exchange: 0')
 args.add_argument('--test', default = 'no', help='do you want to perform the test suite?')
 
+args.add_argument('--startindex', default = 1, help='the start index of the iteration')
+
 args = args.parse_args()
 
 
 with open('../data/biggr2ec.pkl', 'rb') as f:
     biggr2ec = pickle.load(f)
-with open('biggec2r.pkl', 'rb') as f:
+with open('../data/biggec2r.pkl', 'rb') as f:
     biggec2r = pickle.load(f)
 print("biggr2ec dictionary loaded successfully.")
 with open('../data/seedr2ec.pkl', 'rb') as f:
@@ -117,27 +78,7 @@ with open('../data/seedec2r.pkl', 'rb') as f:
 print("seedr2ec dictionary loaded successfully.")
 
   
-def read_ecpred(input_file):
-    pr2ec = {}
-    with open(input_file, 'r') as inFile:
-        for line in inFile:
-            line = line.split()
-            pr = line[0]
-            items = line[-1].split(';')
-            for item in items:
-                if item.startswith('None'):
-                    break
-                elif item.startswith('EC:'):
-                    # ec = item.split('/')
-                    ecid = item.split(':')[-1]
-                    
-                    try:
-                        pr2ec[pr].append(ecid)
-                    except KeyError:
-                        pr2ec[pr] = [ecid]     
-    print('pr2ec-protein number->',len(list(pr2ec.keys()))) 
-    return pr2ec
-   
+
 #----------------------------------------------------------------------------------------------------------------------#
 if __name__ == "__main__":
     # Process input settings
@@ -171,6 +112,8 @@ if __name__ == "__main__":
     lower = float(args.lower)
     maxweight = float(args.maxweight)
     minweight = float(args.minweight)
+
+    startindex = int(args.startindex)
 
     ## print all input arguments in condense form
     print('all input arguments:\n',args,sep='')
@@ -213,19 +156,35 @@ if __name__ == "__main__":
     with open('../data/gene_names.pickle', 'rb') as f:
         gene_names = pickle.load(f)
 
-    for i in range(1,int(inter)+1):
+    for i in range(startindex,int(inter)+startindex):
         print('*'*50)
         print('Inter:',i)
         print('inter=',inter)
         print('*'*50)
+        if startindex !=1 and i == startindex:
+            print('Startindex is not 1, Continue the iteration from {}'.format(startindex),flush=True)
+            with open(f'../data/tmp/{name}_ORIpredscore_{i-1}.pkl', 'rb') as f:
+                predscore = pickle.load(f)
+            print(f'loaded original predscore from CLEAN prediction',flush=True)
+            
+            for index in range(1,i):
+                with open(f'../data/tmp/{name}_differ_predscore_{index}.pkl', 'rb') as f:
+                    differpredscore = pickle.load(f)
+                predscore = update_differ(predscore,differpredscore)
+
+            ## get allec2pr from predscore
+            allec2pr = pr2ec_to_ec2pr(predscore)
+
         if i == 1:
             if file_type ==2:
                 fasta_file = input_file
-                clean_file = run_clean(fasta_file)
-            pr2ec,ec2pr,predscore,allec2pr = read_cleandf_withscore(clean_file,threshold=threshold)
+                # clean_file = run_clean(fasta_file)
+            elif file_type == 1:
+                clean_file = input_file
+            _,_,predscore,allec2pr = read_cleandf_withscore(clean_file,threshold=threshold)
 
             ## save the original predscore
-            with open(f'../data/tmp/{name}_t{threshold}_ORIpredscore_{i-1}.pkl', 'wb') as f:
+            with open(f'../data/tmp/{name}_ORIpredscore_{i-1}.pkl', 'wb') as f:
                 pickle.dump(predscore, f)
             print(f'saved original predscore from CLEAN prediction',flush=True)
 
@@ -380,6 +339,13 @@ if __name__ == "__main__":
         print('>>> Write model to sbml')
         input_file = input_file.split('/')[-1] # write to working directory
         
+        ## save the dictionary
+        thr = str(threshold).split('.')[-1]
+        if float(threshold) >= 1.0:
+            thr = str(float(threshold)).split('.')[0]
+        else:
+            thr = str(threshold).split('.')[-1]
+
         if file_type == 1:
             if new_id != 'default':
                 out_file = input_file.rstrip('maxsep_df.pkl') + new_id + f'I{i}'+ '.sbml'
@@ -390,22 +356,18 @@ if __name__ == "__main__":
                 out_file = input_file.rstrip('.fasta') + new_id + f'I{i}'+ '.sbml'
             else:
                 out_file = input_file.rstrip('.fasta') + 'enzbuild' +  f'I{i}'+'.sbml'
-            out_file = '../data/result/' + out_file
+        out_file = '../data/result/sbmls/' + out_file
         print('\n>>Saving new GEM to', out_file, '\n')
 
-        ## save the dictionary
-        thr = str(threshold).split('.')[-1]
-        if float(threshold) >= 1.0:
-            thr = str(float(threshold)).split('.')[0]
-        else:
-            thr = str(threshold).split('.')[-1]
+        differpredscore = differ(predscore,newpredscore)
+        print('differen len:',len(differpredscore.keys()),flush=True)
 
+        
 
-
-        with open(f'../data/tmp/{name}_t{thr}_differ_predscore_{i}.pkl', 'wb') as f:
-            pickle.dump(newpredscore, f)
+        with open(f'../data/tmp/{name}_differ_predscore_{i}.pkl', 'wb') as f:
+            pickle.dump(differpredscore, f)
         print(f'saved differ predscore {i}')
-        with open(f'../data/tmp/{name}_t{thr}_updateprs_{i}.pkl', 'wb') as f:
+        with open(f'../data/tmp/{name}_updateprs_{i}.pkl', 'wb') as f:
             pickle.dump(updateprs, f)
         print(f'saved updateprs {i}')
 

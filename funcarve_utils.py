@@ -492,7 +492,7 @@ def _find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, ste
 
 
 # pFBA gapfiller
-def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type,weight_dict):
+def weighted_find_reactions(model, reaction_bag, tasks, obj, fraction, max_fraction, step, file_type,weight_dict,method):
     ''' pFBA gapfiller that modifies universal reaction bag, removes overlapping reacitons from universal reaction bag
     and resets objective if needed, adds model reaction to universal bag, sets lower bound for metabolic tasks, 
     sets minimum lower bound for previous objective, assemble forward and reverse components of all reactions,

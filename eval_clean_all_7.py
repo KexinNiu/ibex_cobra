@@ -418,31 +418,6 @@ def pkl_getinfo(prediscoref,cutoff,all_label,refpred_names):
         pred_label.append(preds_ec_lst)
         pred_label_nocut.append(preds_ec_lst_nocut)
 
-    # for key, val in dd.items():
-    #     key = key.split('=')[-1] ## remove after run tmp ecoli
-    #     pred_names.append(key)
-    #     preds_ec_lst = []
-    #     preds_ec_lst_nocut = []
-    #     probs = np.zeros(len(val.keys()))
-    #     count = 0
-    #     for ec,score in val.items():
-    #         # ec_i = ec.split(":")[1].split("/")[0]
-    #         ec_i = ec
-    #         if ec_i not in all_label:
-    #             continue
-    #         probs[count] = score
-    #         count+=1
-    #         preds_ec_lst_nocut.append(ec_i)
-    #         if float(score) <= cutoff:
-    #             preds_ec_lst.append(ec_i)
-
-    #     probs = (1 - np.exp(-1/probs)) / (1 + np.exp(-1/probs))
-    #     probs = probs/np.sum(probs)
-
-    #     pred_probs.append(probs)
-    #     pred_label.append(preds_ec_lst)
-    #     pred_label_nocut.append(preds_ec_lst_nocut)
-
     return pred_names,pred_label,pred_label_nocut,pred_probs
 
 
@@ -646,6 +621,7 @@ evallist=['allec','flux','fluxblock','block']
 # outf = f'/ibex/user/niuk0a/funcarve/cobra/eval_clean_all_7_{evaltype}.out'
 # of = open(outf,'w')
 file_path = '/ibex/user/niuk0a/funcarve/cobra/eval_clean_7v3.csv'
+file_path = '/ibex/user/niuk0a/funcarve/cobra/data/result/eval_clean_7v4.csv'
 if not os.path.exists(file_path):
     df = pd.DataFrame()
 else:

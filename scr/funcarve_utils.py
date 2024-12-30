@@ -25,6 +25,22 @@ with open(f'{data_root}seedec2r.pkl', 'rb') as f:
     seedec2r = pickle.load(f)
 print("seed-ec-reaction dictionary loaded successfully.")
 
+def update_differ(oridf,differdf):
+    dd = oridf.copy()
+    for key in differdf.keys():
+        dd[key] = differdf[key]
+    return dd
+
+def pr2ec_to_ec2pr(allpr2ec): ## predscore
+    allec2pr = {}
+    for pr in allpr2ec.keys():
+        for ec in allpr2ec[pr].keys():
+            try:
+                allec2pr[ec].update({pr:allpr2ec[pr][ec]})
+            except:
+                allec2pr[ec] = {pr:allpr2ec[pr][ec]}
+    return allec2pr
+ 
 def run_clean(fasta_file):
     # print('Running CLEAN...',flush=True)
     print('running CLEAN AUTO IS NOT DONE YET',flush=True)
@@ -147,6 +163,53 @@ def clean2seedr(allpr2ec,threshold):
                                 rxns[rid] = [pr]
     print('rxns:',len(rxns))
     return universal_scoredict,rxns
+
+def clean2biggr(allpr2ec,threshold):
+    print('biggec2r:',len(biggec2r.keys()))
+    universal_scoredict={}
+    rxns = {}
+    r2maxecp={}
+    for pr, ec_score in allpr2ec.items():
+        smallest_10_dist_df = pd.Series(ec_score).nsmallest(20)
+        dist_lst = list(smallest_10_dist_df)
+        max_sep_i = maximum_separation(dist_lst, True, True)
+        max_sep_ec = [smallest_10_dist_df.index[i] for i in range(max_sep_i+1)]
+        
+        for ec , score in ec_score.items():
+            biggec  = 'EC:'+ec
+            if biggec in biggec2r.keys():
+                rids = biggec2r[biggec]
+                # print('ec',ec,'|','rids:',rids)
+                for rid in rids:
+                    # rid = rid + '_c'
+                    if rid in universal_scoredict.keys():
+                        ori = universal_scoredict[rid]
+                        universal_scoredict[rid] = min(score,ori)
+                        if universal_scoredict[rid] <= threshold:
+                            if ori ==  universal_scoredict[rid]:
+                                continue
+                            elif ec in max_sep_ec:
+                                try:
+                                    rxns[rid].append(pr) 
+                                except KeyError:
+                                    rxns[rid] = [pr]
+                    else:
+                        universal_scoredict[rid] = score
+                        if score <= threshold and ec in max_sep_ec:
+                            try:
+                                rxns[rid].append(pr) 
+                            except KeyError:
+                                rxns[rid] = [pr]
+
+                    # if rid in r2maxecp.keys():
+                    #     score = universal_scoredict[rid]
+                    #     if score < r2maxecp[rid][-1]:
+                    #         r2maxecp[rid] = [pr,ec,score]
+                    # else:
+                    #     r2maxecp[rid] = [pr,ec,score]
+    print('rxns:',len(rxns))
+    # print('rxns:',rxns)
+    return universal_scoredict,rxns,r2maxecp
 
 def update_predscore(newreactions,allec2pr,newallpr2ec,updateprs,reward,threshold):
     count = 0

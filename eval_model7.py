@@ -311,6 +311,7 @@ def check_modelbigg(evaltype='allec'):
             # for j in range(0,10):
             for j in range(0,4):
                 file = pref + '_maxsep_df' + modelname +'_'+ evaltype + '_' + str(thr) +'iter_'+str(j)+ '.sbml'  # only for inter1
+                
                 if not os.path.exists(file):
                     continue
                 # check if already in overlap
