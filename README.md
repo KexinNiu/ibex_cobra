@@ -1,6 +1,3 @@
-Here's a refined version of your GitHub README file with improved structure and formatting:
-
-```md
 # EnzBuilder: Simultaneously Improving Metabolic Model Reconstruction and Enzyme Function Annotation with Machine Learning Methods
 
 EnzBuilder integrates predicted protein annotations directly into the metabolic reconstruction and refinement processes.
@@ -14,8 +11,6 @@ EnzBuilder integrates predicted protein annotations directly into the metabolic 
 4. [Usage](#usage)
 5. [CLEAN Prediction](#clean-prediction)
 6. [Contributing](#contributing)
-7. [License](#license)
-8. [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -64,8 +59,9 @@ tar -xzvf data.tar.gz
 ---
 
 ## Usage
-### Basic Workflow
-Run the following command to process your input file:
+### Basic metabolic model reconstruction
+Run the following command to process your input file:\
+test input file can be found in the previous data.tar.gz
 
 ```bash
 python funcarve_main.py \
@@ -85,6 +81,33 @@ python funcarve_main.py \
   --minweight 0.0
 ```
 
+#### Parameter explanation
+
+- `--input_file`: Path to the input file. Default is 'none'.
+- `--file_type`: Input file type. Options are cleandf=1 or fasta=2. Default is 1.
+- `--reward`: Reward for new reactions to update predscore. Default is 0.1.
+- `--iter`: The number of iterations to run the funcarve algorithm. Default is 3.
+- `--block_flage`: Decrease block reactions (1) or ignore block reactions (0). Default is 1.
+- `--flux_flage`: Reward changed by flux of the reactions (1) or ignore reactions fluxes (0). Default is 0.
+- `--media`: List of metabolites composing the media condition. Not required. Default is 'rich'.
+- `--tasks`: List of metabolic tasks. Not required. Default is an empty list.
+- `--org`: KEGG organism code. Not required. Default is 'default'.
+- `--min_frac`: Minimum objective fraction required during gapfilling. Default is 0.01.
+- `--max_frac`: Maximum objective fraction allowed during gapfilling. Default is 0.5.
+- `--threshold`: The cutoff value for the EC prediction score. Default is 5.
+- `--upper`: Upper threshold for predscore. Default is 15.
+- `--lower`: Lower threshold for predscore. Default is 5.
+- `--maxweight`: Maximum weight for reactions. Default is 100.
+- `--minweight`: Minimum weight for reactions. Default is 0.0.
+- `--gram`: Type of Gram classification (positive or negative). Default is 'none'.
+- `--out`: Name of output GENRE file. Default is 'defaultpath'.
+- `--name`: ID of output GENRE. Default is 'default'.
+- `--cpu`: Number of processors to use. Default is 1.
+- `--gapfill`: Gapfill your model? Default is 'yes'.
+- `--exchange`: Open exchange (1) or shut down exchange (0). Default is 1.
+- `--startindex`: The start index of the iteration. Default is 1.
+
+
 ---
 
 ## CLEAN Prediction
@@ -101,13 +124,4 @@ We welcome contributions! If you'd like to contribute, please fork the repositor
 
 For bug reports or feature requests, please open an issue on the GitHub repository.
 
----
 
-<!-- ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. -->
-
----
-
-## Acknowledgments
-- Thank you to all contributors and researchers who have helped shape EnzBuilder.
-- Special thanks to the authors of CLEAN for their enzyme function prediction framework.
